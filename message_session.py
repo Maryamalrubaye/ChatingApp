@@ -57,14 +57,15 @@ class MessageHandler:
 
 
 class MessageSubscriber(Thread, MessageHandler):
-    def __init__(self, channel: str):
+    def __init__(self, user_channel: str, recipient: str):
         super().__init__()
-        self.channel = channel
+        self.user_channel = user_channel
+        self.recipient = recipient
         self.start()
 
     def run(self) -> None:
         redis_pubsub = MessageHandler.redis_client.pubsub()
-        redis_pubsub.subscribe(self.channel)
+        redis_pubsub.subscribe(self.user_channel)
         while True:
             redis_message = redis_pubsub.get_message()
             if redis_message:
@@ -72,15 +73,14 @@ class MessageSubscriber(Thread, MessageHandler):
                 if data and isinstance(data, bytes):
                     data = json.loads(data)
                     username = data['username']
-                    if self.check_user_accessibility(username):
+                    if self.__check_user_accessibility(username):
                         message = data['message']
                         print(f"\n{username}: {message}\n")
                         time.sleep(0.01)
 
-    def check_user_accessibility(self, user) -> bool:
+    def __check_user_accessibility(self, user) -> bool:
         user_exist = True
-        if self.channel != user:
-            print(f"User '{user}' sent a message")
+        if self.recipient != user:
             user_exist = False
         return user_exist
 
@@ -127,7 +127,7 @@ class MessageSession:
     def start_messaging_session(self):
         """ Starts the messaging session.
         """
-        MessageSubscriber(self.username)
+        MessageSubscriber(self.username, self.recipient)
         MessagePublisher(self.username, self.recipient)
 
     def __check_if_channel_exist(self) -> bool:
