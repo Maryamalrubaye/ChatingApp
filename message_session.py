@@ -56,7 +56,7 @@ class MessageHandler:
         return [*private_channels, *public_channels]
 
 
-class MessageSubscriber(Thread, MessageHandler):
+class PrivateMessageSubscriber(Thread, MessageHandler):
     def __init__(self, user_channel: str, recipient: str):
         super().__init__()
         self.user_channel = user_channel
@@ -83,6 +83,28 @@ class MessageSubscriber(Thread, MessageHandler):
         if self.recipient != user:
             user_exist = False
         return user_exist
+
+
+class PublicMessageSubscriber(Thread, MessageHandler):
+    def __init__(self, user_channel: str, recipient: str):
+        super().__init__()
+        self.user_channel = user_channel
+        self.recipient = recipient
+        self.start()
+
+    def run(self) -> None:
+        redis_pubsub = MessageHandler.redis_client.pubsub()
+        redis_pubsub.subscribe(self.recipient)
+        while True:
+            redis_message = redis_pubsub.get_message()
+            if redis_message:
+                data = redis_message["data"]
+                if data and isinstance(data, bytes):
+                    data = json.loads(data)
+                    username = data['username']
+                    message = data['message']
+                    print(f"\n{username}: {message}\n")
+                    time.sleep(0.01)
 
 
 class MessagePublisher(Thread):
@@ -127,7 +149,12 @@ class MessageSession:
     def start_messaging_session(self):
         """ Starts the messaging session.
         """
-        MessageSubscriber(self.username, self.recipient)
+        public_channels = MessageHandler.get_public_channels()
+        private_channels = MessageHandler.get_private_channels()
+        if self.recipient in public_channels:
+            PublicMessageSubscriber(self.username, self.recipient)
+        elif self.recipient in private_channels:
+            PrivateMessageSubscriber(self.username, self.recipient)
         MessagePublisher(self.username, self.recipient)
 
     def __check_if_channel_exist(self) -> bool:
