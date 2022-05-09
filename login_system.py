@@ -4,11 +4,13 @@ import itertools
 
 
 class LoginHandler:
-    connection = sqlite3.connect("login.db")
+    connection = sqlite3.connect("login.db", check_same_thread=False)
     cursor = connection.cursor()
     connection.commit()
+
     usernames = cursor.execute("SELECT name FROM login").fetchall()
     username_list = list(itertools.chain(*[username for username in usernames]))
+
     groups = cursor.execute("SELECT group_name FROM group_table").fetchall()
     group_list = list(itertools.chain(*[group for group in groups]))
 

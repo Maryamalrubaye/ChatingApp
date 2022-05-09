@@ -1,6 +1,7 @@
 import json
 import time
 import redis
+
 from typing import Tuple
 from threading import Thread
 import login_system as lg
@@ -19,7 +20,7 @@ TODO:
 - filter user subscribed message to be as same as the publisher name. (for the private chat) done
 - group chat done
 - login/signup (id, username, password) done
-- every user chat history
+- every user chat history 
 """
 
 
@@ -56,6 +57,27 @@ class MessageHandler:
         return [*private_channels, *public_channels]
 
 
+class ChatHistoryHandler:
+    def __init__(self, recipient: str, data: dict):
+        self.recipient = recipient
+        self.data = data
+        self.database_conn()
+
+    def database_conn(self) -> None:
+        """ Listens continuously to user messages and save them  to the database.
+        """
+
+        data = json.dumps(self.data)
+        data = json.loads(data)
+        username = data['username']
+        message = data['message']
+        user_id = lg.LoginHandler.cursor.execute(
+                "SELECT id from login WHERE name='" + username + "'").fetchone()
+        user_id = str(user_id).strip("('',)'")
+        lg.LoginHandler.cursor.execute('INSERT INTO messages VALUES(?,?,?,?,?)', (None, username, self.recipient, message, user_id))
+        lg.LoginHandler.connection.commit()
+
+
 class PrivateMessageSubscriber(Thread, MessageHandler):
     def __init__(self, user_channel: str, recipient: str):
         super().__init__()
@@ -73,8 +95,8 @@ class PrivateMessageSubscriber(Thread, MessageHandler):
                 if data and isinstance(data, bytes):
                     data = json.loads(data)
                     username = data['username']
+                    message = data['message']
                     if self.__check_user_accessibility(username):
-                        message = data['message']
                         print(f"\n{username}: {message}\n")
                         time.sleep(0.01)
 
@@ -121,6 +143,7 @@ class MessagePublisher(Thread):
             data: message to sent to redis channel.
             recipient: the message recipient.
         """
+        ChatHistoryHandler(self.recipient, data)
         json_data = json.dumps(data)
         MessageHandler.redis_client.publish(recipient, json_data)
 
