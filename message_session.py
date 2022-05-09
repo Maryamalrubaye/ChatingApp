@@ -72,7 +72,7 @@ class ChatHistoryHandler:
         username = data['username']
         message = data['message']
         user_id = lg.LoginHandler.cursor.execute(
-                "SELECT id from login WHERE name='" + username + "'").fetchone()
+                "SELECT id from users WHERE name='" + username + "'").fetchone()
         user_id = str(user_id).strip("('',)'")
         lg.LoginHandler.cursor.execute('INSERT INTO messages VALUES(?,?,?,?,?)', (None, username, self.recipient, message, user_id))
         lg.LoginHandler.connection.commit()
