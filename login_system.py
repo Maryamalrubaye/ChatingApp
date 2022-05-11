@@ -36,9 +36,9 @@ class Registration:
         self.password = None
         self.email = None
         self.rewrite_password = None
-        self.start_login()
+        self.__register()
 
-    def start_login(self) -> None:
+    def __register(self) -> None:
         while True:
             self.username = input("Enter your username. ")
             if LoginHandler.check_username_existing(self.username):
@@ -76,7 +76,7 @@ class Login:
         self.password = None
         self.username = username
 
-    def start(self) -> bool:
+    def login(self) -> bool:
         cursor = LoginHandler.cursor
         check_user = False
         while True:
