@@ -1,12 +1,10 @@
 import itertools
 import json
 import time
-
-import datetime
-from threading import Thread
-from typing import Tuple
-
 import redis
+import datetime
+from typing import Tuple
+from threading import Thread
 import login_system as lg
 from database_connection import DatabaseConnection as db
 
