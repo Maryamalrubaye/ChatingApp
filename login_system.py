@@ -1,33 +1,25 @@
-import sqlite3
 import sys
-import itertools
+from database_connection import DatabaseConnection as db
 
 
 class LoginHandler:
-    connection = sqlite3.connect("login.db", check_same_thread=False)
-    cursor = connection.cursor()
-    connection.commit()
-
-    usernames = cursor.execute("SELECT name FROM users").fetchall()
-    username_list = list(itertools.chain(*[username for username in usernames]))
-
-    groups = cursor.execute("SELECT group_name FROM group_table").fetchall()
-    group_list = list(itertools.chain(*[group for group in groups]))
 
     @classmethod
     def check_username_existing(cls, username) -> bool:
-        existed_username = LoginHandler.cursor.execute(
-            "SELECT name FROM users WHERE name='" + username + "'").fetchone()
-        existed_username = str(existed_username).strip("('',)'")
-        if existed_username == username:
-            return True
+        with db.database_connection() as cursor:
+            existed_username = cursor.execute(
+                "SELECT name FROM users WHERE name='" + username + "'").fetchone()
+            existed_username = str(existed_username).strip("('',)'")
+            if existed_username == username:
+                return True
 
     @classmethod
     def check_email_existing(cls, email) -> bool:
-        existed_email = LoginHandler.cursor.execute("SELECT email FROM users WHERE email='" + email + "'").fetchone()
-        existed_email = str(existed_email).strip("('',)'")
-        if existed_email == email:
-            return True
+        with db.database_connection() as cursor:
+            existed_email = cursor.execute("SELECT email FROM users WHERE email='" + email + "'").fetchone()
+            existed_email = str(existed_email).strip("('',)'")
+            if existed_email == email:
+                return True
 
 
 class Registration:
@@ -60,11 +52,10 @@ class Registration:
 
     def __check_password(self) -> bool:
         if self.password == self.rewrite_password:
-            LoginHandler.cursor.execute('INSERT INTO users VALUES(?,?,?,?)',
-                                        (None, self.username, self.email, self.password))
-            LoginHandler.connection.commit()
-            print('You are now registered.')
-            return True
+            with db.database_connection() as cursor:
+                cursor.execute('INSERT INTO users VALUES(?,?,?,?)', (None, self.username, self.email, self.password))
+                print('You are now registered.')
+                return True
 
         else:
             print('Password does not match')
@@ -77,19 +68,20 @@ class Login:
         self.username = username
 
     def login(self) -> bool:
-        cursor = LoginHandler.cursor
         check_user = False
         while True:
             password = input("Enter your password. ")
             if LoginHandler.check_username_existing(self):
-                db_password = cursor.execute("SELECT password from users WHERE password='" + password + "'").fetchone()
-                db_password = str(db_password).strip("('',)'")
-                if db_password == password:
-                    print('You are now logged in.')
-                    check_user = True
-                    return check_user
-                else:
-                    print('Wrong password.')
+                with db.database_connection() as cursor:
+                    db_password = cursor.execute(
+                        "SELECT password from users WHERE password='" + password + "'").fetchone()
+                    db_password = str(db_password).strip("('',)'")
+                    if db_password == password:
+                        print('You are now logged in.')
+                        check_user = True
+                        return check_user
+                    else:
+                        print('Wrong password.')
             else:
                 print('Wrong username.')
                 return check_user

@@ -1,10 +1,12 @@
+import itertools
 import json
 import time
-import redis
-
-from typing import Tuple
 from threading import Thread
+from typing import Tuple
+
+import redis
 import login_system as lg
+from database_connection import DatabaseConnection as db
 
 """
 private chat: 
@@ -22,9 +24,16 @@ class MessageHandler:
     password = 'maryam21'
     redis_client = redis.Redis(host='localhost', port=port, password=password)
 
+    with db.database_connection() as cursor:
+        usernames = cursor.execute("SELECT name FROM users").fetchall()
+        username_list = list(itertools.chain(*[username for username in usernames]))
+
+        groups = cursor.execute("SELECT group_name FROM group_table").fetchall()
+        group_list = list(itertools.chain(*[group for group in groups]))
+
     channels = {
-        'private': lg.LoginHandler.username_list,
-        'public': lg.LoginHandler.group_list,
+        'private': username_list,
+        'public': group_list,
     }
 
     @classmethod
@@ -60,30 +69,30 @@ class ChatHistoryHandler:
     def database_conn(self) -> None:
         """ Listens continuously to user messages and save them  to the database.
         """
-
         data = json.dumps(self.data)
         data = json.loads(data)
         username = self.get_user_id(data['username'])
         message = data['message']
         recipient_type = self.__check_recipient_type()
         recipient = self.get_user_id(self.recipient)
-        lg.LoginHandler.cursor.execute('INSERT INTO messages VALUES(?,?,?,?,?)',
-                                       (None, username, recipient, recipient_type, message))
-        lg.LoginHandler.connection.commit()
+        with db.database_connection() as cursor:
+            cursor.execute('INSERT INTO messages VALUES(?,?,?,?,?)',
+                           (None, username, recipient, recipient_type, message))
 
     @staticmethod
     def get_user_id(user) -> int:
         private_channels = MessageHandler.get_private_channels()
-        if user in private_channels:
-            user_id = lg.LoginHandler.cursor.execute(
-                "SELECT id from users WHERE name='" + user + "'").fetchone()
-            user_id = str(user_id).strip("('',)'")
-            return user_id
-        else:
-            user_id = lg.LoginHandler.cursor.execute(
-                "SELECT id from group_table WHERE group_name='" + user + "'").fetchone()
-            user_id = str(user_id).strip("('',)'")
-            return user_id
+        with db.database_connection() as cursor:
+            if user in private_channels:
+                user_id = cursor.execute(
+                    "SELECT id from users WHERE name='" + user + "'").fetchone()
+                user_id = str(user_id).strip("('',)'")
+                return user_id
+            else:
+                user_id = cursor.execute(
+                    "SELECT id from group_table WHERE group_name='" + user + "'").fetchone()
+                user_id = str(user_id).strip("('',)'")
+                return user_id
 
     def __check_recipient_type(self) -> str:
         public_channels = MessageHandler.get_public_channels()
@@ -196,14 +205,36 @@ class MessageSession:
         else:
             print('Incorrect input.Run script again. ')
 
-    def start_messaging_session(self):
+    def __public_messages_recovery(self) -> None:
+        recipient_id = ChatHistoryHandler.get_user_id(self.recipient)
+        with db.database_connection() as cursor:
+            messages = cursor.execute(
+                "SELECT  u.name, m.message_content from messages m, users u WHERE m.receiver_id ='" + recipient_id + "' and m.receiver_type ='group' and u.id ='" + recipient_id + "'").fetchall()
+        self.__print_messages(messages)
+
+    def __private_messages_recovery(self) -> None:
+        recipient_id = ChatHistoryHandler.get_user_id(self.recipient)
+        user_id = ChatHistoryHandler.get_user_id(self.username)
+        with db.database_connection() as cursor:
+            messages = cursor.execute(
+                "SELECT u.name, m.message_content from messages m, users u WHERE m.sender_id ='" + user_id + "' and m.receiver_id ='" + recipient_id + "' and m.receiver_type ='user' and u.id ='" + user_id + "' or m.sender_id ='" + recipient_id + "' and m.receiver_id ='" + user_id + "' and m.receiver_type ='user' and u.id ='" + recipient_id + "' ").fetchall()
+            self.__print_messages(messages)
+
+    @staticmethod
+    def __print_messages(messages) -> None:
+        for x in range(len(messages)):
+            print(messages[x][0] + ' : ' + messages[x][1])
+
+    def start_messaging_session(self) -> None:
         """ Starts the messaging session.
         """
         public_channels = MessageHandler.get_public_channels()
         private_channels = MessageHandler.get_private_channels()
         if self.recipient in public_channels:
+            self.__public_messages_recovery()
             PublicMessageSubscriber(self.username, self.recipient)
         elif self.recipient in private_channels:
+            self.__private_messages_recovery()
             PrivateMessageSubscriber(self.username, self.recipient)
         MessagePublisher(self.username, self.recipient)
 
@@ -219,11 +250,12 @@ class MessageSession:
     def __check_group_membership(self) -> bool:
         user_id = ChatHistoryHandler.get_user_id(self.username)
         recipient_id = ChatHistoryHandler.get_user_id(self.recipient)
-        existed_membership = lg.LoginHandler.cursor.execute(
-            "SELECT user_id FROM group_members WHERE user_id ='" + user_id + "'  AND group_id ='" + recipient_id + "' ").fetchone()
-        existed_membership = str(existed_membership).strip("('',)'")
-        if existed_membership == user_id:
-            return True
+        with db.database_connection() as cursor:
+            existed_membership = cursor.execute(
+                "SELECT user_id FROM group_members WHERE user_id ='" + user_id + "'  AND group_id ='" + recipient_id + "' ").fetchone()
+            existed_membership = str(existed_membership).strip("('',)'")
+            if existed_membership == user_id:
+                return True
 
     def __group_membership_controller(self) -> None:
         public_channels = MessageHandler.get_public_channels()
@@ -233,8 +265,8 @@ class MessageSession:
             else:
                 user_id = ChatHistoryHandler.get_user_id(self.username)
                 recipient_id = ChatHistoryHandler.get_user_id(self.recipient)
-                lg.LoginHandler.cursor.execute('INSERT INTO group_members VALUES(?,?)', (user_id, recipient_id))
-                lg.LoginHandler.connection.commit()
+                with db.database_connection() as cursor:
+                    cursor.execute('INSERT INTO group_members VALUES(?,?)', (user_id, recipient_id))
 
     def start(self) -> None:
         self.get_user_info()
