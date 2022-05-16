@@ -8,6 +8,8 @@ class DatabaseConnection:
     @classmethod
     @contextmanager
     def database_connection(cls) -> None:
+        """ database connection for the chatting app.
+               """
         cls.connection = sql.connect("chatapp.db", check_same_thread=False)
         cursor = cls.connection.cursor()
         try:
