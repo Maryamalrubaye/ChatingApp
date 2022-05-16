@@ -37,11 +37,11 @@ class MessageHandler:
     }
 
     @classmethod
-    def get_private_channels(cls):
+    def get_private_channels(cls) -> list:
         return cls.channels['private']
 
     @classmethod
-    def get_public_channels(cls):
+    def get_public_channels(cls) -> list:
         return cls.channels['public']
 
     @classmethod
@@ -67,7 +67,7 @@ class DatabaseHandler:
         self.insert_messages()
 
     def insert_messages(self) -> None:
-        """ Listens continuously to user messages and save them  to the database.
+        """ Listens continuously to user messages and save them to the database.
         """
         data = json.dumps(self.data)
         data = json.loads(data)
@@ -82,6 +82,8 @@ class DatabaseHandler:
 
     @staticmethod
     def get_user_id(user) -> int:
+        """ Get channel id using channel name.
+               """
         private_channels = MessageHandler.get_private_channels()
         with db.database_connection() as cursor:
             if user in private_channels:
@@ -96,6 +98,9 @@ class DatabaseHandler:
                 return user_id
 
     def __check_recipient_type(self) -> str:
+        """  check recipient type if it is group or user
+        so we could save its type as a receiver type to handle the messages in the database
+               """
         public_channels = MessageHandler.get_public_channels()
         private_channels = MessageHandler.get_private_channels()
         if self.recipient in public_channels:
@@ -129,6 +134,8 @@ class PrivateMessageSubscriber(Thread, MessageHandler):
                         time.sleep(0.01)
 
     def __check_user_accessibility(self, user) -> bool:
+        """  Returns true if the the user has the accessibility to enter private chat
+               """
         user_exist = True
         if self.recipient != user:
             user_exist = False
@@ -210,6 +217,8 @@ class MessagesRecovery:
 
     @staticmethod
     def __print_messages(messages) -> None:
+        """ print and reformat messages history coming from the database
+               """
         for x in range(len(messages)):
             print(messages[x][0] + ' : ' + messages[x][1])
 
@@ -220,6 +229,8 @@ class MessageSession:
         self.recipient = None
 
     def get_user_info(self) -> None:
+        """ check if user is registered or not and login to user account or creates new account
+               """
         query = input('for login please write 1 & for signup please write 2')
         if query == "1":
             while True:
@@ -255,6 +266,8 @@ class MessageSession:
         return channel_exist
 
     def __check_group_membership(self) -> bool:
+        """ returns true if the user is a member of the group
+               """
         user_id = DatabaseHandler.get_user_id(self.username)
         recipient_id = DatabaseHandler.get_user_id(self.recipient)
         with db.database_connection() as cursor:

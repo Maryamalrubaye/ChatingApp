@@ -8,7 +8,7 @@ class DatabaseConnection:
     @classmethod
     @contextmanager
     def database_connection(cls) -> None:
-        cls.connection = sql.connect("login.db", check_same_thread=False)
+        cls.connection = sql.connect("chatapp.db", check_same_thread=False)
         cursor = cls.connection.cursor()
         try:
             yield cursor
