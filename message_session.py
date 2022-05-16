@@ -6,7 +6,7 @@ import datetime
 from typing import Tuple
 from threading import Thread
 import login_system as lg
-from database_connection import DatabaseConnection as db
+from database_connection import DatabaseContextManager
 
 """
 private chat: 
@@ -24,7 +24,7 @@ class MessageHandler:
     password = 'maryam21'
     redis_client = redis.Redis(host='localhost', port=port, password=password)
 
-    with db.database_connection() as cursor:
+    with DatabaseContextManager() as cursor:
         usernames = cursor.execute("SELECT name FROM users").fetchall()
         username_list = list(itertools.chain(*[username for username in usernames]))
 
@@ -76,7 +76,7 @@ class DatabaseHandler:
         recipient_type = self.__check_recipient_type()
         recipient = self.get_user_id(self.recipient)
         current_datetime = datetime.datetime.now()
-        with db.database_connection() as cursor:
+        with DatabaseContextManager() as cursor:
             cursor.execute('INSERT INTO messages VALUES(?,?,?,?,?,?)',
                            (None, username, message, recipient, recipient_type, current_datetime))
 
@@ -85,7 +85,7 @@ class DatabaseHandler:
         """ Get channel id using channel name.
                """
         private_channels = MessageHandler.get_private_channels()
-        with db.database_connection() as cursor:
+        with DatabaseContextManager() as cursor:
             if user in private_channels:
                 user_id = cursor.execute(
                     "SELECT id from users WHERE name='" + user + "'").fetchone()
@@ -202,7 +202,7 @@ class MessagesRecovery:
 
     def public_messages_recovery(self) -> None:
         recipient_id = DatabaseHandler.get_user_id(self.recipient)
-        with db.database_connection() as cursor:
+        with DatabaseContextManager() as cursor:
             messages = cursor.execute(
                 "SELECT  u.name, m.message_content from messages m, users u WHERE m.receiver_id ='" + recipient_id + "' and m.receiver_type ='group' and u.id = m.sender_id ORDER BY m.date ASC").fetchall()
         self.__print_messages(messages)
@@ -210,7 +210,7 @@ class MessagesRecovery:
     def private_messages_recovery(self) -> None:
         recipient_id = DatabaseHandler.get_user_id(self.recipient)
         user_id = DatabaseHandler.get_user_id(self.username)
-        with db.database_connection() as cursor:
+        with DatabaseContextManager() as cursor:
             messages = cursor.execute(
                 "SELECT u.name, m.message_content from messages m, users u WHERE m.sender_id ='" + user_id + "' and m.receiver_id ='" + recipient_id + "' and m.receiver_type ='user' and u.id ='" + user_id + "' or m.sender_id ='" + recipient_id + "' and m.receiver_id ='" + user_id + "' and m.receiver_type ='user' and u.id ='" + recipient_id + "' ORDER BY m.date ASC ").fetchall()
             self.__print_messages(messages)
@@ -270,7 +270,7 @@ class MessageSession:
                """
         user_id = DatabaseHandler.get_user_id(self.username)
         recipient_id = DatabaseHandler.get_user_id(self.recipient)
-        with db.database_connection() as cursor:
+        with DatabaseContextManager() as cursor:
             existed_membership = cursor.execute(
                 "SELECT user_id FROM group_members WHERE user_id ='" + user_id + "'  AND group_id ='" + recipient_id + "' ").fetchone()
             existed_membership = str(existed_membership).strip("('',)'")
@@ -285,7 +285,7 @@ class MessageSession:
             else:
                 user_id = DatabaseHandler.get_user_id(self.username)
                 recipient_id = DatabaseHandler.get_user_id(self.recipient)
-                with db.database_connection() as cursor:
+                with DatabaseContextManager() as cursor:
                     cursor.execute('INSERT INTO group_members VALUES(?,?)', (user_id, recipient_id))
 
     def start(self) -> None:

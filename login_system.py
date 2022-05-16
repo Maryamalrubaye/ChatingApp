@@ -1,12 +1,12 @@
 import sys
-from database_connection import DatabaseConnection as db
+from database_connection import DatabaseContextManager
 
 
 class LoginHandler:
 
     @classmethod
     def check_username_existing(cls, username) -> bool:
-        with db.database_connection() as cursor:
+        with DatabaseContextManager() as cursor:
             existed_username = cursor.execute(
                 "SELECT name FROM users WHERE name='" + username + "'").fetchone()
             existed_username = str(existed_username).strip("('',)'")
@@ -15,7 +15,7 @@ class LoginHandler:
 
     @classmethod
     def check_email_existing(cls, email) -> bool:
-        with db.database_connection() as cursor:
+        with DatabaseContextManager() as cursor:
             existed_email = cursor.execute("SELECT email FROM users WHERE email='" + email + "'").fetchone()
             existed_email = str(existed_email).strip("('',)'")
             if existed_email == email:
@@ -52,7 +52,7 @@ class Registration:
 
     def __check_password(self) -> bool:
         if self.password == self.rewrite_password:
-            with db.database_connection() as cursor:
+            with DatabaseContextManager() as cursor:
                 cursor.execute('INSERT INTO users VALUES(?,?,?,?)', (None, self.username, self.email, self.password))
                 print('You are now registered.')
                 return True
@@ -72,7 +72,7 @@ class Login:
         while True:
             password = input("Enter your password. ")
             if LoginHandler.check_username_existing(self):
-                with db.database_connection() as cursor:
+                with DatabaseContextManager() as cursor:
                     db_password = cursor.execute(
                         "SELECT password from users WHERE password='" + password + "'").fetchone()
                     db_password = str(db_password).strip("('',)'")

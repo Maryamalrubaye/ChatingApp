@@ -1,21 +1,15 @@
-import sqlite3 as sql
-from contextlib import contextmanager
+import sqlite3
 
 
-class DatabaseConnection:
-    connection = None
+class DatabaseContextManager:
+    def __init__(self):
+        self.database = "chatapp.db"
 
-    @classmethod
-    @contextmanager
-    def database_connection(cls) -> None:
-        """ database connection for the chatting app.
-               """
-        cls.connection = sql.connect("chatapp.db", check_same_thread=False)
-        cursor = cls.connection.cursor()
-        try:
-            yield cursor
-        except Exception as exception:
-            print(exception)
-        finally:
-            cls.connection.commit()
-            cls.connection.close()
+    def __enter__(self):
+        self.connection = sqlite3.connect(self.database)
+        self.cursor = self.connection.cursor()
+        return self.cursor
+
+    def __exit__(self, exc_class, exc, traceback):
+        self.connection.commit()
+        self.connection.close()
