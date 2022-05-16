@@ -1,6 +1,8 @@
 import itertools
 import json
 import time
+
+import datetime
 from threading import Thread
 from typing import Tuple
 
@@ -59,14 +61,14 @@ class MessageHandler:
         return [*private_channels, *public_channels]
 
 
-class ChatHistoryHandler:
+class DatabaseHandler:
     def __init__(self, recipient: str, data: dict, username: str):
         self.recipient = recipient
         self.data = data
         self.username = username
-        self.database_conn()
+        self.insert_messages()
 
-    def database_conn(self) -> None:
+    def insert_messages(self) -> None:
         """ Listens continuously to user messages and save them  to the database.
         """
         data = json.dumps(self.data)
@@ -75,9 +77,10 @@ class ChatHistoryHandler:
         message = data['message']
         recipient_type = self.__check_recipient_type()
         recipient = self.get_user_id(self.recipient)
+        current_datetime = datetime.datetime.now()
         with db.database_connection() as cursor:
-            cursor.execute('INSERT INTO messages VALUES(?,?,?,?,?)',
-                           (None, username, recipient, recipient_type, message))
+            cursor.execute('INSERT INTO messages VALUES(?,?,?,?,?,?)',
+                           (None, username, message, recipient, recipient_type, current_datetime))
 
     @staticmethod
     def get_user_id(user) -> int:
@@ -170,7 +173,7 @@ class MessagePublisher(Thread):
             data: message to sent to redis channel.
             recipient: the message recipient.
         """
-        ChatHistoryHandler(self.recipient, data, self.username)
+        DatabaseHandler(self.recipient, data, self.username)
         json_data = json.dumps(data)
         MessageHandler.redis_client.publish(recipient, json_data)
 
@@ -185,6 +188,32 @@ class MessagePublisher(Thread):
                 'message': message
             }
             self.send_message(data, self.recipient)
+
+
+class MessagesRecovery:
+    def __init__(self, username: str, recipient: str):
+        self.username = username
+        self.recipient = recipient
+
+    def public_messages_recovery(self) -> None:
+        recipient_id = DatabaseHandler.get_user_id(self.recipient)
+        with db.database_connection() as cursor:
+            messages = cursor.execute(
+                "SELECT  u.name, m.message_content from messages m, users u WHERE m.receiver_id ='" + recipient_id + "' and m.receiver_type ='group' and u.id = m.sender_id ORDER BY m.date ASC").fetchall()
+        self.__print_messages(messages)
+
+    def private_messages_recovery(self) -> None:
+        recipient_id = DatabaseHandler.get_user_id(self.recipient)
+        user_id = DatabaseHandler.get_user_id(self.username)
+        with db.database_connection() as cursor:
+            messages = cursor.execute(
+                "SELECT u.name, m.message_content from messages m, users u WHERE m.sender_id ='" + user_id + "' and m.receiver_id ='" + recipient_id + "' and m.receiver_type ='user' and u.id ='" + user_id + "' or m.sender_id ='" + recipient_id + "' and m.receiver_id ='" + user_id + "' and m.receiver_type ='user' and u.id ='" + recipient_id + "' ORDER BY m.date ASC ").fetchall()
+            self.__print_messages(messages)
+
+    @staticmethod
+    def __print_messages(messages) -> None:
+        for x in range(len(messages)):
+            print(messages[x][0] + ' : ' + messages[x][1])
 
 
 class MessageSession:
@@ -205,36 +234,16 @@ class MessageSession:
         else:
             print('Incorrect input.Run script again. ')
 
-    def __public_messages_recovery(self) -> None:
-        recipient_id = ChatHistoryHandler.get_user_id(self.recipient)
-        with db.database_connection() as cursor:
-            messages = cursor.execute(
-                "SELECT  u.name, m.message_content from messages m, users u WHERE m.receiver_id ='" + recipient_id + "' and m.receiver_type ='group' and u.id ='" + recipient_id + "'").fetchall()
-        self.__print_messages(messages)
-
-    def __private_messages_recovery(self) -> None:
-        recipient_id = ChatHistoryHandler.get_user_id(self.recipient)
-        user_id = ChatHistoryHandler.get_user_id(self.username)
-        with db.database_connection() as cursor:
-            messages = cursor.execute(
-                "SELECT u.name, m.message_content from messages m, users u WHERE m.sender_id ='" + user_id + "' and m.receiver_id ='" + recipient_id + "' and m.receiver_type ='user' and u.id ='" + user_id + "' or m.sender_id ='" + recipient_id + "' and m.receiver_id ='" + user_id + "' and m.receiver_type ='user' and u.id ='" + recipient_id + "' ").fetchall()
-            self.__print_messages(messages)
-
-    @staticmethod
-    def __print_messages(messages) -> None:
-        for x in range(len(messages)):
-            print(messages[x][0] + ' : ' + messages[x][1])
-
     def start_messaging_session(self) -> None:
         """ Starts the messaging session.
         """
         public_channels = MessageHandler.get_public_channels()
         private_channels = MessageHandler.get_private_channels()
         if self.recipient in public_channels:
-            self.__public_messages_recovery()
+            MessagesRecovery(self.username, self.recipient).public_messages_recovery()
             PublicMessageSubscriber(self.username, self.recipient)
         elif self.recipient in private_channels:
-            self.__private_messages_recovery()
+            MessagesRecovery(self.username, self.recipient).private_messages_recovery()
             PrivateMessageSubscriber(self.username, self.recipient)
         MessagePublisher(self.username, self.recipient)
 
@@ -248,8 +257,8 @@ class MessageSession:
         return channel_exist
 
     def __check_group_membership(self) -> bool:
-        user_id = ChatHistoryHandler.get_user_id(self.username)
-        recipient_id = ChatHistoryHandler.get_user_id(self.recipient)
+        user_id = DatabaseHandler.get_user_id(self.username)
+        recipient_id = DatabaseHandler.get_user_id(self.recipient)
         with db.database_connection() as cursor:
             existed_membership = cursor.execute(
                 "SELECT user_id FROM group_members WHERE user_id ='" + user_id + "'  AND group_id ='" + recipient_id + "' ").fetchone()
@@ -263,8 +272,8 @@ class MessageSession:
             if self.__check_group_membership():
                 print('you are already a member')
             else:
-                user_id = ChatHistoryHandler.get_user_id(self.username)
-                recipient_id = ChatHistoryHandler.get_user_id(self.recipient)
+                user_id = DatabaseHandler.get_user_id(self.username)
+                recipient_id = DatabaseHandler.get_user_id(self.recipient)
                 with db.database_connection() as cursor:
                     cursor.execute('INSERT INTO group_members VALUES(?,?)', (user_id, recipient_id))
 
