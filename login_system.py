@@ -57,8 +57,7 @@ class Registration:
                             self.rewrite_password = self.LoginHandler.set_password()
                             if self.__check_password():
                                 print('You are now registered.')
-                                if self.login_to_the_system():
-                                    return self.username
+                                return self.username
                             else:
                                 print('password did not match! try again')
                                 continue
@@ -75,10 +74,6 @@ class Registration:
         with DatabaseConnected() as cursor:
             cursor.execute('INSERT INTO users VALUES(?,?,?,?)', (None, self.username, self.email, self.password))
             return True
-
-    def login_to_the_system(self) -> bool:
-        Login().start(self.username, self.password)
-        return True
 
 
 class Login:
@@ -99,12 +94,13 @@ class Login:
             self.password = password
 
     def login(self) -> str:
+        self.start()
         if LoginHandler.check_username_existing(self.username) and self.__check_password():
             print('Successfully logged-in :)')
             return self.username
         else:
             print('wrong username or password please try again!')
-            self.start()
+            self.login()
 
     def __check_password(self) -> bool:
         with DatabaseConnected() as cursor:
@@ -120,5 +116,4 @@ class Login:
 
 
 if __name__ == '__main__':
-    Login().login()
-    # Registration()
+    Registration().register()

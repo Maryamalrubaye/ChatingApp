@@ -12,7 +12,7 @@ class AppController:
                """
         choice = input('for login please write 1 & for signup please write 2 : ')
         if choice == "1":
-            self.username = login_system.Login().start()
+            self.username = login_system.Login().login()
             return True
         elif choice == "2":
             self.username = login_system.Registration().register()
