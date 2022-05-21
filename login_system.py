@@ -1,11 +1,12 @@
-from database_connection import DatabaseConnected
+import sys
+from database_connection import DatabaseContextManager
 
 
 class LoginHandler:
 
     @classmethod
     def check_username_existing(cls, username) -> bool:
-        with DatabaseConnected() as cursor:
+        with DatabaseContextManager() as cursor:
             existed_username = cursor.execute(
                 "SELECT name FROM users WHERE name='" + username + "'").fetchone()
             existed_username = str(existed_username).strip("('',)'")
@@ -14,21 +15,11 @@ class LoginHandler:
 
     @classmethod
     def check_email_existing(cls, email) -> bool:
-        with DatabaseConnected() as cursor:
+        with DatabaseContextManager() as cursor:
             existed_email = cursor.execute("SELECT email FROM users WHERE email='" + email + "'").fetchone()
             existed_email = str(existed_email).strip("('',)'")
             if existed_email == email:
                 return True
-
-    @classmethod
-    def set_username(cls) -> str:
-        username: str = str(input("Enter your username: "))
-        return username
-
-    @classmethod
-    def set_password(cls) -> str:
-        password: str = str(input("Enter your password: "))
-        return password
 
 
 class Registration:
@@ -37,89 +28,60 @@ class Registration:
         self.password = None
         self.email = None
         self.rewrite_password = None
-        self.LoginHandler = LoginHandler()
+        self.__register()
 
-    def register(self) -> str:
+    def __register(self) -> None:
         while True:
-            self.username = self.LoginHandler.set_username()
-            if self.LoginHandler.check_username_existing(self.username):
-                print('That username already exists, try another one!')
+            self.username = input("Enter your username. ")
+            if LoginHandler.check_username_existing(self.username):
+                print('That username already exists,try another one!')
                 continue
             else:
                 while True:
-                    self.__set_email()
-                    if self.LoginHandler.check_email_existing(self.email):
+                    self.email = input("Enter your email. ")
+                    if LoginHandler.check_email_existing(self.email):
                         print('That email is already in our database,enter another one!')
                         continue
                     else:
                         while True:
-                            self.password = self.LoginHandler.set_password()
-                            self.rewrite_password = self.LoginHandler.set_password()
+                            self.password = input("Enter your password. ")
+                            self.rewrite_password = input("Enter your password again. ")
                             if self.__check_password():
-                                print('You are now registered.')
-                                if self.login_to_the_system():
-                                    return self.username
-                            else:
-                                print('password did not match! try again')
-                                continue
+                                sys.exit()
+                            continue
 
     def __check_password(self) -> bool:
         if self.password == self.rewrite_password:
-            self.____register_to_database()
-            return True
+            with DatabaseContextManager() as cursor:
+                cursor.execute('INSERT INTO users VALUES(?,?,?,?)', (None, self.username, self.email, self.password))
+                print('You are now registered.')
+                return True
 
-    def __set_email(self) -> None:
-        self.email = input(" Enter your email:")
-
-    def ____register_to_database(self) -> bool:
-        with DatabaseConnected() as cursor:
-            cursor.execute('INSERT INTO users VALUES(?,?,?,?)', (None, self.username, self.email, self.password))
-            return True
-
-    def login_to_the_system(self) -> bool:
-        Login().start(self.username, self.password)
-        return True
+        else:
+            print('Password does not match')
+            return False
 
 
 class Login:
-    def __init__(self):
+    def __init__(self, username: str):
         self.password = None
-        self.username = None
+        self.username = username
 
-    def get_username(self, user=None):
-        if user is None:
-            self.username = LoginHandler.set_username()
-        else:
-            self.username = user
-
-    def get_password(self, password=None):
-        if password is None:
-            self.password = LoginHandler.set_password()
-        else:
-            self.password = password
-
-    def login(self) -> str:
+    def login(self) -> bool:
+        check_user = False
         while True:
-            self.start()
-            if LoginHandler.check_username_existing(self.username) and self.__check_password():
-                print('Successfully logged-in :)')
-                return self.username
+            password = input("Enter your password. ")
+            if LoginHandler.check_username_existing(self):
+                with DatabaseContextManager() as cursor:
+                    db_password = cursor.execute(
+                        "SELECT password from users WHERE password='" + password + "'").fetchone()
+                    db_password = str(db_password).strip("('',)'")
+                    if db_password == password:
+                        print('You are now logged in.')
+                        check_user = True
+                        return check_user
+                    else:
+                        print('Wrong password.')
             else:
-                print('wrong username or password please try again!')
-                continue
-
-    def __check_password(self) -> bool:
-        with DatabaseConnected() as cursor:
-            db_password = cursor.execute(
-                "SELECT password from users WHERE password='" + self.password + "'").fetchone()
-            db_password = str(db_password).strip("('',)'")
-            if db_password == self.password:
-                return True
-
-    def start(self, username=None, password=None) -> None:
-        self.get_username(username)
-        self.get_password(password)
-
-
-if __name__ == '__main__':
-    Login().login()
+                print('Wrong username.')
+                return check_user

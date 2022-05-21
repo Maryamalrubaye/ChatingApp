@@ -5,7 +5,8 @@ import redis
 import datetime
 from typing import Tuple
 from threading import Thread
-from database_connection import DatabaseConnected
+import login_system as lg
+from database_connection import DatabaseContextManager
 
 """
 private chat: 
@@ -18,22 +19,12 @@ all people wishing to use public chat should:
 """
 
 
-class RedisConnected:
-    def __init__(self):
-        self.port = 6379
-        self.password = 'maryam21'
-        self.host = 'localhost'
-
-    def __enter__(self):
-        self.redis_client = redis.Redis(host=self.host, port=self.port, password=self.password)
-        return self.redis_client
-
-    def __exit__(self, exc_class, exc, traceback):
-        self.redis_client.close()
-
-
 class MessageHandler:
-    with DatabaseConnected() as cursor:
+    port = 6379
+    password = 'maryam21'
+    redis_client = redis.Redis(host='localhost', port=port, password=password)
+
+    with DatabaseContextManager() as cursor:
         usernames = cursor.execute("SELECT name FROM users").fetchall()
         username_list = list(itertools.chain(*[username for username in usernames]))
 
@@ -85,7 +76,7 @@ class DatabaseHandler:
         recipient_type = self.__check_recipient_type()
         recipient = self.get_user_id(self.recipient)
         current_datetime = datetime.datetime.now()
-        with DatabaseConnected() as cursor:
+        with DatabaseContextManager() as cursor:
             cursor.execute('INSERT INTO messages VALUES(?,?,?,?,?,?)',
                            (None, username, message, recipient, recipient_type, current_datetime))
 
@@ -94,7 +85,7 @@ class DatabaseHandler:
         """ Get channel id using channel name.
                """
         private_channels = MessageHandler.get_private_channels()
-        with DatabaseConnected() as cursor:
+        with DatabaseContextManager() as cursor:
             if user in private_channels:
                 user_id = cursor.execute(
                     "SELECT id from users WHERE name='" + user + "'").fetchone()
@@ -128,9 +119,8 @@ class PrivateMessageSubscriber(Thread, MessageHandler):
         self.start()
 
     def run(self) -> None:
-        with RedisConnected() as redis_client:
-            redis_pubsub = redis_client.pubsub()
-            redis_pubsub.subscribe(self.user_channel)
+        redis_pubsub = MessageHandler.redis_client.pubsub()
+        redis_pubsub.subscribe(self.user_channel)
         while True:
             redis_message = redis_pubsub.get_message()
             if redis_message:
@@ -160,9 +150,8 @@ class PublicMessageSubscriber(Thread, MessageHandler):
         self.start()
 
     def run(self) -> None:
-        with RedisConnected() as redis_client:
-            redis_pubsub = redis_client.pubsub()
-            redis_pubsub.subscribe(self.recipient)
+        redis_pubsub = MessageHandler.redis_client.pubsub()
+        redis_pubsub.subscribe(self.recipient)
         while True:
             redis_message = redis_pubsub.get_message()
             if redis_message:
@@ -191,8 +180,7 @@ class MessagePublisher(Thread):
         """
         DatabaseHandler(self.recipient, data, self.username)
         json_data = json.dumps(data)
-        with RedisConnected() as redis_client:
-            redis_client.publish(recipient, json_data)
+        MessageHandler.redis_client.publish(recipient, json_data)
 
     def run(self) -> None:
         """ Listens continuously to user messages and send them them to the desired destination.
@@ -214,7 +202,7 @@ class MessagesRecovery:
 
     def public_messages_recovery(self) -> None:
         recipient_id = DatabaseHandler.get_user_id(self.recipient)
-        with DatabaseConnected() as cursor:
+        with DatabaseContextManager() as cursor:
             messages = cursor.execute(
                 "SELECT  u.name, m.message_content from messages m, users u WHERE m.receiver_id ='" + recipient_id + "' and m.receiver_type ='group' and u.id = m.sender_id ORDER BY m.date ASC").fetchall()
         self.__print_messages(messages)
@@ -222,7 +210,7 @@ class MessagesRecovery:
     def private_messages_recovery(self) -> None:
         recipient_id = DatabaseHandler.get_user_id(self.recipient)
         user_id = DatabaseHandler.get_user_id(self.username)
-        with DatabaseConnected() as cursor:
+        with DatabaseContextManager() as cursor:
             messages = cursor.execute(
                 "SELECT u.name, m.message_content from messages m, users u WHERE m.sender_id ='" + user_id + "' and m.receiver_id ='" + recipient_id + "' and m.receiver_type ='user' and u.id ='" + user_id + "' or m.sender_id ='" + recipient_id + "' and m.receiver_id ='" + user_id + "' and m.receiver_type ='user' and u.id ='" + recipient_id + "' ORDER BY m.date ASC ").fetchall()
             self.__print_messages(messages)
@@ -236,10 +224,24 @@ class MessagesRecovery:
 
 
 class MessageSession:
-    def __init__(self, username: str, recipient: str):
-        self.username = username
-        self.recipient = recipient
-        self.start()
+    def __init__(self):
+        self.username = None
+        self.recipient = None
+
+    def get_user_info(self) -> None:
+        """ check if user is registered or not and login to user account or creates new account
+               """
+        query = input('for login please write 1 & for signup please write 2')
+        if query == "1":
+            while True:
+                self.username: str = str(input("Enter your username: "))
+                if lg.Login.login(self.username):
+                    self.recipient: str = str(input("Enter your Recipient: "))
+                    break
+        elif query == "2":
+            lg.Registration()
+        else:
+            print('Incorrect input.Run script again. ')
 
     def start_messaging_session(self) -> None:
         """ Starts the messaging session.
@@ -268,7 +270,7 @@ class MessageSession:
                """
         user_id = DatabaseHandler.get_user_id(self.username)
         recipient_id = DatabaseHandler.get_user_id(self.recipient)
-        with DatabaseConnected() as cursor:
+        with DatabaseContextManager() as cursor:
             existed_membership = cursor.execute(
                 "SELECT user_id FROM group_members WHERE user_id ='" + user_id + "'  AND group_id ='" + recipient_id + "' ").fetchone()
             existed_membership = str(existed_membership).strip("('',)'")
@@ -283,10 +285,15 @@ class MessageSession:
             else:
                 user_id = DatabaseHandler.get_user_id(self.username)
                 recipient_id = DatabaseHandler.get_user_id(self.recipient)
-                with DatabaseConnected() as cursor:
+                with DatabaseContextManager() as cursor:
                     cursor.execute('INSERT INTO group_members VALUES(?,?)', (user_id, recipient_id))
 
     def start(self) -> None:
+        self.get_user_info()
         if self.__check_if_channel_exist():
             self.__group_membership_controller()
             self.start_messaging_session()
+
+
+if __name__ == '__main__':
+    MessageSession().start()

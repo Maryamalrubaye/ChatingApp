@@ -1,7 +1,7 @@
 import sqlite3
 
 
-class DatabaseConnected:
+class DatabaseContextManager:
     def __init__(self):
         self.database = "chatapp.db"
 
