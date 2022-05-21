@@ -78,9 +78,11 @@ class DatabaseHandler:
     def insert_messages(self) -> None:
         """ Listens continuously to user messages and save them to the database.
         """
+        print(self.username)
         data = json.dumps(self.data)
         data = json.loads(data)
-        username = self.get_user_id(data['username'])
+        username = self.get_user_id(self.username)
+        print(username)
         message = data['message']
         recipient_type = self.__check_recipient_type()
         recipient = self.get_user_id(self.recipient)
