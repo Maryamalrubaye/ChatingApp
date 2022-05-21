@@ -1,4 +1,4 @@
-import sys
+from typing import Tuple
 
 from database_connection import DatabaseConnected
 
@@ -41,36 +41,22 @@ class Registration:
         self.rewrite_password = None
         self.LoginHandler = LoginHandler()
 
-    def register(self) -> str:
-        while True:
-            self.username = self.LoginHandler.set_username()
-            if self.LoginHandler.check_username_existing(self.username):
-                print('That username already exists, try another one!')
-                continue
-            else:
-                while True:
-                    self.__set_email()
-                    if self.LoginHandler.check_email_existing(self.email):
-                        print('That email is already in our database,enter another one!')
-                        continue
-                    else:
-                        while True:
-                            self.password = self.LoginHandler.set_password()
-                            self.rewrite_password = self.LoginHandler.set_password()
-                            if self.__check_password():
-                                print('You are now registered.')
-                                return self.username, self.password
-                            else:
-                                print('password did not match! try again')
-                                continue
-
-    def register_test(self) -> str:
-        pass
+    def register(self) -> Tuple[str, str]:
+        self.__set_username()
+        self.__set_email()
+        self.__check_password()
+        self.____register_to_database()
+        print('You are now registered.')
+        return self.username, self.password
 
     def __check_password(self) -> bool:
+        self.password = self.LoginHandler.set_password()
+        self.rewrite_password = self.LoginHandler.set_password()
         if self.password == self.rewrite_password:
-            self.____register_to_database()
             return True
+        else:
+            print('password did not match! try again')
+            self.__check_password()
 
     def __set_email(self) -> bool:
         self.email = input(" Enter your email:")
@@ -99,13 +85,13 @@ class Login:
         self.password = None
         self.username = None
 
-    def get_username(self, user=None):
+    def get_username(self, user=None) -> str:
         if user is None:
             self.username = LoginHandler.set_username()
         else:
             self.username = user
 
-    def get_password(self, password=None):
+    def get_password(self, password=None) -> str:
         if password is None:
             self.password = LoginHandler.set_password()
         else:
@@ -131,4 +117,4 @@ class Login:
 
 
 if __name__ == '__main__':
-    Login().login()
+    Registration().register()

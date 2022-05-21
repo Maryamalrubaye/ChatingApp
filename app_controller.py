@@ -6,6 +6,7 @@ class AppController:
     def __init__(self):
         self.username = None
         self.recipient = None
+        self.choice = None
 
     def get_user_info(self) -> None:
         """ check if user is registered or not and login to user account or creates new account

@@ -9,7 +9,6 @@ from threading import Thread
 
 from database_connection import DatabaseConnected
 
-
 """
 private chat: 
     -publish: the other person channel
@@ -36,17 +35,21 @@ class RedisConnected:
 
 
 class MessageHandler:
-    with DatabaseConnected() as cursor:
-        usernames = cursor.execute("SELECT name FROM users").fetchall()
-        username_list = list(itertools.chain(*[username for username in usernames]))
-
-        groups = cursor.execute("SELECT group_name FROM group_table").fetchall()
-        group_list = list(itertools.chain(*[group for group in groups]))
-
     channels = {
-        'private': username_list,
-        'public': group_list,
+        'private': None,
+        'public': None,
     }
+
+    @classmethod
+    def init(cls) -> None:
+        with DatabaseConnected() as cursor:
+            usernames = cursor.execute("SELECT name FROM users").fetchall()
+            all_usernames = [username for username in usernames]
+            cls.channels['private'] = list(itertools.chain(*all_usernames))
+
+            groups = cursor.execute("SELECT group_name FROM group_table").fetchall()
+            all_groups = [group for group in groups]
+            cls.channels['public'] = list(itertools.chain(*all_groups))
 
     @classmethod
     def get_private_channels(cls) -> list:
@@ -81,11 +84,9 @@ class DatabaseHandler:
     def insert_messages(self) -> None:
         """ Listens continuously to user messages and save them to the database.
         """
-        print(self.username)
         data = json.dumps(self.data)
         data = json.loads(data)
         username = self.get_user_id(self.username)
-        print(username)
         message = data['message']
         recipient_type = self.__check_recipient_type()
         recipient = self.get_user_id(self.recipient)
@@ -260,9 +261,10 @@ class MessageSession:
         MessagePublisher(self.username, self.recipient)
 
     def __check_if_channel_exist(self) -> bool:
+        MessageHandler.init()
         channel_exist = True
         all_channels = MessageHandler.get_all_channels()
-        print(all_channels)
+        print(f'{all_channels = }')
         if self.recipient not in all_channels:
             print(f"Recipient '{self.recipient}' does not exist!")
             channel_exist = False
