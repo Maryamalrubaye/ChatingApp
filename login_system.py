@@ -1,3 +1,5 @@
+import sys
+
 from database_connection import DatabaseConnected
 
 
@@ -57,18 +59,34 @@ class Registration:
                             self.rewrite_password = self.LoginHandler.set_password()
                             if self.__check_password():
                                 print('You are now registered.')
-                                return self.username
+                                return self.username, self.password
                             else:
                                 print('password did not match! try again')
                                 continue
+
+    def register_test(self) -> str:
+        pass
 
     def __check_password(self) -> bool:
         if self.password == self.rewrite_password:
             self.____register_to_database()
             return True
 
-    def __set_email(self) -> None:
+    def __set_email(self) -> bool:
         self.email = input(" Enter your email:")
+        if self.LoginHandler.check_email_existing(self.email):
+            print('That email is already in our database,enter another one!')
+            self.__set_email()
+        else:
+            return True
+
+    def __set_username(self) -> bool:
+        self.username = self.LoginHandler.set_username()
+        if self.LoginHandler.check_username_existing(self.username):
+            print('That username already exists, try another one!')
+            self.__set_username()
+        else:
+            return True
 
     def ____register_to_database(self) -> bool:
         with DatabaseConnected() as cursor:
@@ -93,8 +111,9 @@ class Login:
         else:
             self.password = password
 
-    def login(self) -> str:
-        self.start()
+    def login(self, username=None, password=None) -> str:
+        self.get_username(username)
+        self.get_password(password)
         if LoginHandler.check_username_existing(self.username) and self.__check_password():
             print('Successfully logged-in :)')
             return self.username
@@ -110,10 +129,6 @@ class Login:
             if db_password == self.password:
                 return True
 
-    def start(self, username=None, password=None) -> None:
-        self.get_username(username)
-        self.get_password(password)
-
 
 if __name__ == '__main__':
-    Registration().register()
+    Login().login()

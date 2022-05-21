@@ -1,11 +1,14 @@
-import itertools
 import json
 import time
 import redis
 import datetime
+import itertools
+
 from typing import Tuple
 from threading import Thread
+
 from database_connection import DatabaseConnected
+
 
 """
 private chat: 
