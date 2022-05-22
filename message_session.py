@@ -74,7 +74,7 @@ class MessageHandler:
         return [*private_channels, *public_channels]
 
 
-class DatabaseHandler:
+class ChatDatabaseHandler:
     def __init__(self, recipient: str, data: dict, username: str):
         self.recipient = recipient
         self.data = data
@@ -124,6 +124,41 @@ class DatabaseHandler:
         elif self.recipient in private_channels:
             recipient_type = 'user'
             return recipient_type
+
+
+class GroupCreator:
+    def __init__(self, members: list, group_name: str):
+        self.members = members
+        self.group_name = group_name
+        self.members_id = None
+        self.start()
+
+    def __check_if_group_exist(self) -> bool:
+        public_channels = MessageHandler.get_public_channels()
+        if self.group_name not in public_channels:
+            return True
+
+    def __get_members_id(self) -> list:
+        self.members_id = [int(ChatDatabaseHandler.get_user_id(self.members[i])) for i in range(len(self.members))]
+        return self.members_id
+
+    def __add_group_to_database(self):
+        with DatabaseConnected() as cursor:
+            cursor.execute('INSERT INTO group_table VALUES(?,?)', (None, self.group_name))
+
+    def __add_group_members(self):
+        group_id = ChatDatabaseHandler.get_user_id(self.group_name)
+        members = self.__get_members_id()
+        for member in range(len(members)):
+            with DatabaseConnected() as cursor:
+                cursor.execute('INSERT INTO group_members VALUES(?,?)', (members[member], group_id))
+
+    def start(self):
+        MessageHandler.init()
+        if self.__check_if_group_exist():
+            self.__add_group_to_database()
+            self.__get_members_id()
+            self.__add_group_members()
 
 
 class PrivateMessageSubscriber(Thread, MessageHandler):
@@ -195,7 +230,7 @@ class MessagePublisher(Thread):
             data: message to sent to redis channel.
             recipient: the message recipient.
         """
-        DatabaseHandler(self.recipient, data, self.username)
+        ChatDatabaseHandler(self.recipient, data, self.username)
         json_data = json.dumps(data)
         with RedisConnected() as redis_client:
             redis_client.publish(recipient, json_data)
@@ -219,15 +254,15 @@ class MessagesRecovery:
         self.recipient = recipient
 
     def public_messages_recovery(self) -> None:
-        recipient_id = DatabaseHandler.get_user_id(self.recipient)
+        recipient_id = ChatDatabaseHandler.get_user_id(self.recipient)
         with DatabaseConnected() as cursor:
             messages = cursor.execute(
                 "SELECT  u.name, m.message_content from messages m, users u WHERE m.receiver_id ='" + recipient_id + "' and m.receiver_type ='group' and u.id = m.sender_id ORDER BY m.date ASC").fetchall()
         self.__print_messages(messages)
 
     def private_messages_recovery(self) -> None:
-        recipient_id = DatabaseHandler.get_user_id(self.recipient)
-        user_id = DatabaseHandler.get_user_id(self.username)
+        recipient_id = ChatDatabaseHandler.get_user_id(self.recipient)
+        user_id = ChatDatabaseHandler.get_user_id(self.username)
         with DatabaseConnected() as cursor:
             messages = cursor.execute(
                 "SELECT u.name, m.message_content from messages m, users u WHERE m.sender_id ='" + user_id + "' and m.receiver_id ='" + recipient_id + "' and m.receiver_type ='user' and u.id ='" + user_id + "' or m.sender_id ='" + recipient_id + "' and m.receiver_id ='" + user_id + "' and m.receiver_type ='user' and u.id ='" + recipient_id + "' ORDER BY m.date ASC ").fetchall()
@@ -273,8 +308,8 @@ class MessageSession:
     def __check_group_membership(self) -> bool:
         """ returns true if the user is a member of the group
                """
-        user_id = DatabaseHandler.get_user_id(self.username)
-        recipient_id = DatabaseHandler.get_user_id(self.recipient)
+        user_id = ChatDatabaseHandler.get_user_id(self.username)
+        recipient_id = ChatDatabaseHandler.get_user_id(self.recipient)
         with DatabaseConnected() as cursor:
             existed_membership = cursor.execute(
                 "SELECT user_id FROM group_members WHERE user_id ='" + user_id + "'  AND group_id ='" + recipient_id + "' ").fetchone()
@@ -286,10 +321,10 @@ class MessageSession:
         public_channels = MessageHandler.get_public_channels()
         if self.recipient in public_channels:
             if self.__check_group_membership():
-                print('you are already a member')
+                print(f'you have joined {self.recipient} group chat!')
             else:
-                user_id = DatabaseHandler.get_user_id(self.username)
-                recipient_id = DatabaseHandler.get_user_id(self.recipient)
+                user_id = ChatDatabaseHandler.get_user_id(self.username)
+                recipient_id = ChatDatabaseHandler.get_user_id(self.recipient)
                 with DatabaseConnected() as cursor:
                     cursor.execute('INSERT INTO group_members VALUES(?,?)', (user_id, recipient_id))
 
