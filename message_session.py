@@ -166,13 +166,16 @@ class PrivateMessageSubscriber(Thread, MessageHandler):
         super().__init__()
         self.user_channel = user_channel
         self.recipient = recipient
+        self._thread = None
         self.start()
 
     def run(self) -> None:
         with RedisConnected() as redis_client:
             redis_pubsub = redis_client.pubsub()
             redis_pubsub.subscribe(self.user_channel)
-        while True:
+        if self._thread is not None:
+            self._thread.stop()
+            self._thread = redis_client.pubsub.run_in_thread()
             redis_message = redis_pubsub.get_message()
             if redis_message:
                 data = redis_message["data"]
@@ -198,13 +201,16 @@ class PublicMessageSubscriber(Thread, MessageHandler):
         super().__init__()
         self.user_channel = user_channel
         self.recipient = recipient
+        self._thread = None
         self.start()
 
     def run(self) -> None:
         with RedisConnected() as redis_client:
             redis_pubsub = redis_client.pubsub()
             redis_pubsub.subscribe(self.recipient)
-        while True:
+            if self._thread is not None:
+                self._thread.stop()
+            self._thread = redis_client.pubsub.run_in_thread()
             redis_message = redis_pubsub.get_message()
             if redis_message:
                 data = redis_message["data"]
