@@ -27,7 +27,7 @@ class RedisConnected:
         self.host = 'localhost'
 
     def __enter__(self):
-        self.redis_client = redis.Redis(host=self.host, port=self.port, password=self.password)
+        self.redis_client = redis.StrictRedis(host=self.host, port=self.port, password=self.password)
         return self.redis_client
 
     def __exit__(self, exc_class, exc, traceback):
@@ -138,7 +138,7 @@ class GroupCreator:
         if self.group_name not in public_channels:
             return True
 
-    def __get_members_id(self) -> list:
+    def __set_members_id(self) -> list:
         self.members_id = [int(ChatDatabaseHandler.get_user_id(self.members[i])) for i in range(len(self.members))]
         return self.members_id
 
@@ -148,7 +148,7 @@ class GroupCreator:
 
     def __add_group_members(self):
         group_id = ChatDatabaseHandler.get_user_id(self.group_name)
-        members = self.__get_members_id()
+        members = self.__set_members_id()
         for member in range(len(members)):
             with DatabaseConnected() as cursor:
                 cursor.execute('INSERT INTO group_members VALUES(?,?)', (members[member], group_id))
@@ -157,7 +157,7 @@ class GroupCreator:
         MessageHandler.init()
         if self.__check_if_group_exist():
             self.__add_group_to_database()
-            self.__get_members_id()
+            self.__set_members_id()
             self.__add_group_members()
 
 
@@ -166,26 +166,24 @@ class PrivateMessageSubscriber(Thread, MessageHandler):
         super().__init__()
         self.user_channel = user_channel
         self.recipient = recipient
-        self._thread = None
         self.start()
 
     def run(self) -> None:
         with RedisConnected() as redis_client:
+            test = {
+                self.user_channel: self.message_handler
+            }
             redis_pubsub = redis_client.pubsub()
-            redis_pubsub.subscribe(self.user_channel)
-        if self._thread is not None:
-            self._thread.stop()
-            self._thread = redis_client.pubsub.run_in_thread()
-            redis_message = redis_pubsub.get_message()
-            if redis_message:
-                data = redis_message["data"]
-                if data and isinstance(data, bytes):
-                    data = json.loads(data)
-                    username = data['username']
-                    message = data['message']
-                    if self.__check_user_accessibility(username):
-                        print(f"\n{username}: {message}\n")
-                        time.sleep(0.01)
+            redis_pubsub.subscribe(**test)
+            redis_pubsub.run_in_thread(time.sleep(0.01))
+
+    def message_handler(self, data: dict):
+        new_data = data['data']
+        data = json.loads(new_data)
+        username = data['data']
+        message = data['message']
+        if self.__check_user_accessibility(username):
+            print(f"\n{username}: {message}\n")
 
     def __check_user_accessibility(self, user) -> bool:
         """  Returns true if the the user has the accessibility to enter private chat
@@ -198,28 +196,27 @@ class PrivateMessageSubscriber(Thread, MessageHandler):
 
 class PublicMessageSubscriber(Thread, MessageHandler):
     def __init__(self, user_channel: str, recipient: str):
-        super().__init__()
+        super(Thread).__init__()
         self.user_channel = user_channel
         self.recipient = recipient
-        self._thread = None
         self.start()
 
     def run(self) -> None:
         with RedisConnected() as redis_client:
+            test = {
+                self.recipient: self.message_handler
+            }
             redis_pubsub = redis_client.pubsub()
-            redis_pubsub.subscribe(self.recipient)
-            if self._thread is not None:
-                self._thread.stop()
-            self._thread = redis_client.pubsub.run_in_thread()
-            redis_message = redis_pubsub.get_message()
-            if redis_message:
-                data = redis_message["data"]
-                if data and isinstance(data, bytes):
-                    data = json.loads(data)
-                    username = data['username']
-                    message = data['message']
-                    print(f"\n{username}: {message}\n")
-                    time.sleep(0.01)
+            redis_pubsub.subscribe(**test)
+            redis_pubsub.run_in_thread(time.sleep(0.01))
+
+    @staticmethod
+    def message_handler(data: dict):
+        new_data = data['data']
+        data = json.loads(new_data)
+        username = data['data']
+        message = data['message']
+        print(f"\n{username}: {message}\n")
 
 
 class MessagePublisher(Thread):
@@ -279,7 +276,7 @@ class MessagesRecovery:
         """ print and reformat messages history coming from the database
                """
         for x in range(len(messages)):
-            print(messages[x][0] + ' : ' + messages[x][1])
+            print(messages[x][0] + ': ' + messages[x][1])
 
 
 class MessageSession:
@@ -305,7 +302,6 @@ class MessageSession:
         MessageHandler.init()
         channel_exist = True
         all_channels = MessageHandler.get_all_channels()
-        print(f'{all_channels = }')
         if self.recipient not in all_channels:
             print(f"Recipient '{self.recipient}' does not exist!")
             channel_exist = False

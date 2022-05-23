@@ -4,7 +4,6 @@ from database_connection import DatabaseConnected
 
 
 class LoginHandler:
-
     @classmethod
     def check_username_existing(cls, username) -> bool:
         with DatabaseConnected() as cursor:
@@ -23,12 +22,12 @@ class LoginHandler:
                 return True
 
     @classmethod
-    def set_username(cls) -> str:
+    def get_username_input(cls) -> str:
         username: str = str(input("Enter your username: "))
         return username
 
     @classmethod
-    def set_password(cls) -> str:
+    def get_password_input(cls) -> str:
         password: str = str(input("Enter your password: "))
         return password
 
@@ -38,43 +37,44 @@ class Registration:
         self.username = None
         self.password = None
         self.email = None
-        self.rewrite_password = None
+        self.password_confirmation = None
         self.LoginHandler = LoginHandler()
 
     def register(self) -> Tuple[str, str]:
         self.__set_username()
         self.__set_email()
-        self.__check_password()
-        self.____register_to_database()
+        self.__set_passwords()
+        self.__confirm_password()
+        self.__register_to_database()
         print('You are now registered.')
         return self.username, self.password
 
-    def __check_password(self) -> bool:
-        self.password = self.LoginHandler.set_password()
-        self.rewrite_password = self.LoginHandler.set_password()
-        if self.password == self.rewrite_password:
+    def __set_passwords(self) -> None:
+        self.password = self.LoginHandler.get_password_input()
+        self.password_confirmation = self.LoginHandler.get_password_input()
+
+    def __confirm_password(self) -> bool:
+        if self.password == self.password_confirmation:
             return True
-        else:
-            print('password did not match! try again')
-            self.__check_password()
+        print('password did not match! try again')
+        self.__set_passwords()
+        self.__confirm_password()
 
     def __set_email(self) -> bool:
         self.email = input(" Enter your email:")
-        if self.LoginHandler.check_email_existing(self.email):
-            print('That email is already in our database,enter another one!')
-            self.__set_email()
-        else:
+        if not self.LoginHandler.check_email_existing(self.email):
             return True
+        print('That email is already in our database,enter another one!')
+        self.__set_email()
 
     def __set_username(self) -> bool:
-        self.username = self.LoginHandler.set_username()
-        if self.LoginHandler.check_username_existing(self.username):
-            print('That username already exists, try another one!')
-            self.__set_username()
-        else:
+        self.username = self.LoginHandler.get_username_input()
+        if not self.LoginHandler.check_username_existing(self.username):
             return True
+        print('That username already exists, try another one!')
+        self.__set_username()
 
-    def ____register_to_database(self) -> bool:
+    def __register_to_database(self) -> bool:
         with DatabaseConnected() as cursor:
             cursor.execute('INSERT INTO users VALUES(?,?,?,?)', (None, self.username, self.email, self.password))
             return True
@@ -85,21 +85,15 @@ class Login:
         self.password = None
         self.username = None
 
-    def get_username(self, user=None) -> str:
-        if user is None:
-            self.username = LoginHandler.set_username()
-        else:
-            self.username = user
+    def set_username(self, user=None) -> str:
+        self.username = user or LoginHandler.get_username_input()
 
-    def get_password(self, password=None) -> str:
-        if password is None:
-            self.password = LoginHandler.set_password()
-        else:
-            self.password = password
+    def set_password(self, password=None) -> str:
+        self.password = password or LoginHandler.get_password_input()
 
     def login(self, username=None, password=None) -> str:
-        self.get_username(username)
-        self.get_password(password)
+        self.set_username(username)
+        self.set_password(password)
         if LoginHandler.check_username_existing(self.username) and self.__check_password():
             print('Successfully logged-in :)')
             return self.username

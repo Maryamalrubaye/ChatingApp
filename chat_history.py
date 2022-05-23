@@ -2,7 +2,7 @@ import message_session
 from database_connection import DatabaseConnected
 
 
-class ConversationListHandler:
+class ConversationHandler:
     def __init__(self, username: str):
         self.username = username
         self.start()
@@ -10,23 +10,27 @@ class ConversationListHandler:
     def __get_previous_conversations(self):
         user_id = self.__get_user_id(self.username)
         with DatabaseConnected() as cursor:
-            messages = cursor.execute(
+            usernames = cursor.execute(
                 "SELECT u.name  from users u, messages m  WHERE m.receiver_id ='" + user_id + "' and m.receiver_type ='user' and m.sender_id = u.id  or m.sender_id ='" + user_id + "' and m.receiver_id = u.id ").fetchall()
-            self.__print_messages(messages)
+            self.__print_users(usernames)
 
     def __get_joined_groups(self):
         user_id = self.__get_user_id(self.username)
         with DatabaseConnected() as cursor:
-            messages = cursor.execute(
+            groups = cursor.execute(
                 "SELECT group_name  from  group_table g, group_members gm WHERE gm.user_id ='" + user_id + "' and  gm.group_id = g.id  ").fetchall()
-            self.__print_messages(messages)
+            self.__print_users(groups)
 
-    def __print_messages(self, messages) -> None:
-        users = []
-        [users.append(x) for x in messages if x not in users]
-        for x in range(len(users)):
-            if users[x][0] != self.username:
-                print(users[x][0])
+    def __print_users(self, usernames) -> None:
+        # TODO: make it one for loop
+        non_duplicate_usernames = []
+        for x in usernames:
+            if x not in non_duplicate_usernames:
+                non_duplicate_usernames.append(x)
+
+        for x in range(len(non_duplicate_usernames)):
+            if non_duplicate_usernames[x][0] != self.username:
+                print(non_duplicate_usernames[x][0])
 
     @staticmethod
     def __get_user_id(user) -> int:
@@ -43,4 +47,4 @@ class ConversationListHandler:
 
 
 if __name__ == '__main__':
-    ConversationListHandler('maryam')
+    ConversationHandler('maryam')
