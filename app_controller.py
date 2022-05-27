@@ -1,7 +1,9 @@
-import chat_history
 import login_system
+import contact_history
 
-from message_session import MessageSession, GroupCreator
+from chat_helper import MessageHandler
+from message_session import MessageSession
+from group_chat import GroupCreator, GroupHandler
 
 
 class AppController:
@@ -25,12 +27,16 @@ class AppController:
         self.__main_page()
 
     def __get_recipient_info(self) -> None:
+        MessageHandler.init()
         self.recipient: str = str(input("Enter your recipient: "))
-        MessageSession(self.username, self.recipient)
+        if self.__check_if_channel_exist():
+            self.__channel_type()
+        else:
+            self.__get_recipient_info()
 
     def __main_page(self):
         print(f'Welcome {self.username} you have contacted the following channels: ')
-        chat_history.ConversationHandler(self.username)
+        contact_history.ContactHistory(self.username)
         self.choice = input('1- to create a new group  \n'
                             '2- to search for new user \n'
                             '3- choose any of the previously contacted channels \n'
@@ -42,14 +48,33 @@ class AppController:
         elif self.choice == '4':
             print('bye bye sweet one :) ')
             exit()
+        else:
+            print('wrong number please choose again :) ')
+            self.__main_page()
 
     def __group_creator(self) -> None:
         group_name: str = str(input("Enter a group name: "))
         members = input('Enter elements of a list separated by space ')
         print("\n")
         members_list = members.split()
-        GroupCreator(members_list, group_name)
+        GroupCreator(members_list, group_name, self.username).start()
         self.__main_page()
+
+    def __check_if_channel_exist(self) -> bool:
+        channel_exist = True
+        all_channels = MessageHandler.get_all_channels()
+        if self.recipient not in all_channels:
+            print(f"Recipient '{self.recipient}' does not exist! please try again.")
+            channel_exist = False
+        return channel_exist
+
+    def __channel_type(self) -> None:
+        public_channels = MessageHandler.get_public_channels()
+        if self.recipient in public_channels:
+            if GroupHandler(self.username, self.recipient):
+                MessageSession(self.username, self.recipient)
+        else:
+            MessageSession(self.username, self.recipient)
 
 
 if __name__ == '__main__':

@@ -1,8 +1,8 @@
-import message_session
+from chat_helper import MessageHandler
 from database_connection import DatabaseConnected
 
 
-class ConversationHandler:
+class ContactHistory:
     def __init__(self, username: str):
         self.username = username
         self.start()
@@ -12,19 +12,19 @@ class ConversationHandler:
         with DatabaseConnected() as cursor:
             usernames = cursor.execute(
                 "SELECT u.name  from users u, messages m  WHERE m.receiver_id ='" + user_id + "' and m.receiver_type ='user' and m.sender_id = u.id  or m.sender_id ='" + user_id + "' and m.receiver_id = u.id ").fetchall()
-            self.__print_users(usernames)
+            self.__print_previous_chat(usernames)
 
     def __get_joined_groups(self):
         user_id = self.__get_user_id(self.username)
         with DatabaseConnected() as cursor:
             groups = cursor.execute(
                 "SELECT group_name  from  group_table g, group_members gm WHERE gm.user_id ='" + user_id + "' and  gm.group_id = g.id  ").fetchall()
-            self.__print_users(groups)
+            self.__print_previous_chat(groups)
 
-    def __print_users(self, usernames) -> None:
+    def __print_previous_chat(self, chats) -> None:
         # TODO: make it one for loop
         non_duplicate_usernames = []
-        for x in usernames:
+        for x in chats:
             if x not in non_duplicate_usernames:
                 non_duplicate_usernames.append(x)
 
@@ -41,10 +41,10 @@ class ConversationHandler:
             return user_id
 
     def start(self) -> None:
-        message_session.MessageHandler.init()
+        MessageHandler.init()
         self.__get_previous_conversations()
         self.__get_joined_groups()
 
 
 if __name__ == '__main__':
-    ConversationHandler('maryam')
+    ContactHistory('maryam')
