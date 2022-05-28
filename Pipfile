@@ -5,6 +5,8 @@ name = "pypi"
 
 [packages]
 redis = "==4.2.2"
+figlet = "*"
+
 [dev-packages]
 
 [requires]

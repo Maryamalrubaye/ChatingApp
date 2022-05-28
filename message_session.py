@@ -1,9 +1,13 @@
 import json
 import time
-import redis
 
-from typing import Tuple
 from threading import Thread
+from abc import ABC, abstractmethod
+
+from group_chat import GroupHandler
+from database_connection import DatabaseConnected
+from chat_helper import RedisConnected, MessageHandler, DatabaseHandler
+
 
 """
 private chat: 
@@ -13,98 +17,65 @@ public chat (groups):
 all people wishing to use public chat should:
     -publish: the username
     -subscribe: group channel.
-    
-    
-TODO:
-- filter user subscribed message to be as same as the publisher name. (for the private chat)
-- group chat
-- login/signup (id, username, password)
-- every user chat history
 """
 
 
-class MessageHandler:
-    port = 6379
-    password = 'maryam21'
-    redis_client = redis.Redis(host='localhost', port=port, password=password)
-
-    channels = {
-        'private': ['maryam', 'huyam', 'hala'],
-        'public': ['group1'],
-    }
-
-    @classmethod
-    def get_private_channels(cls):
-        return cls.channels['private']
-
-    @classmethod
-    def get_public_channels(cls):
-        return cls.channels['public']
-
-    @classmethod
-    def get_channels(cls) -> Tuple[list, list]:
-        """ Returns private and public channels names in order.
-        """
-        return cls.channels['private'], cls.channels['public']
-
-    @classmethod
-    def get_all_channels(cls) -> list:
-        """ Returns all channels names in one list.
-        """
-        private_channels, public_channels = cls.get_channels()
-        # unpack the list using *
-        return [*private_channels, *public_channels]
-
-
-class PrivateMessageSubscriber(Thread, MessageHandler):
+class Subscriber(ABC):
     def __init__(self, user_channel: str, recipient: str):
-        super().__init__()
         self.user_channel = user_channel
         self.recipient = recipient
-        self.start()
+        self.start_subscriber()
 
-    def run(self) -> None:
-        redis_pubsub = MessageHandler.redis_client.pubsub()
-        redis_pubsub.subscribe(self.user_channel)
-        while True:
-            redis_message = redis_pubsub.get_message()
-            if redis_message:
-                data = redis_message["data"]
-                if data and isinstance(data, bytes):
-                    data = json.loads(data)
-                    username = data['username']
-                    if self.__check_user_accessibility(username):
-                        message = data['message']
-                        print(f"\n{username}: {message}\n")
-                        time.sleep(0.01)
+    def start_subscriber(self) -> None:
+        with RedisConnected() as redis_client:
+            subscribe_handler = {
+                self.get_subscriber(): self.message_handler
+            }
+            redis_pubsub = redis_client.pubsub()
+            redis_pubsub.subscribe(**subscribe_handler)
+            redis_pubsub.run_in_thread(time.sleep(0.01))
+
+    @abstractmethod
+    def message_handler(self, data: dict) -> None:
+        pass
+
+    @abstractmethod
+    def get_subscriber(self) -> str:
+        pass
+
+
+class PrivateMessageSubscriber(Subscriber):
+
+    def get_subscriber(self) -> str:
+        return self.user_channel
+
+    def message_handler(self, data: dict):
+        new_data = data['data']
+        data = json.loads(new_data)
+        username = data['username']
+        message = data['message']
+        if self.__check_user_accessibility(username):
+            print(f"\n{username}: {message}\n")
 
     def __check_user_accessibility(self, user) -> bool:
+        """  Returns true if the the user has the accessibility to enter private chat
+               """
         user_exist = True
         if self.recipient != user:
             user_exist = False
         return user_exist
 
 
-class PublicMessageSubscriber(Thread, MessageHandler):
-    def __init__(self, user_channel: str, recipient: str):
-        super().__init__()
-        self.user_channel = user_channel
-        self.recipient = recipient
-        self.start()
+class PublicMessageSubscriber(Subscriber):
+    def get_subscriber(self) -> str:
+        return self.recipient
 
-    def run(self) -> None:
-        redis_pubsub = MessageHandler.redis_client.pubsub()
-        redis_pubsub.subscribe(self.recipient)
-        while True:
-            redis_message = redis_pubsub.get_message()
-            if redis_message:
-                data = redis_message["data"]
-                if data and isinstance(data, bytes):
-                    data = json.loads(data)
-                    username = data['username']
-                    message = data['message']
-                    print(f"\n{username}: {message}\n")
-                    time.sleep(0.01)
+    def message_handler(self, data: dict):
+        new_data = data['data']
+        data = json.loads(new_data)
+        username = data['username']
+        message = data['message']
+        print(f"\n{username}: {message}\n")
 
 
 class MessagePublisher(Thread):
@@ -121,8 +92,10 @@ class MessagePublisher(Thread):
             data: message to sent to redis channel.
             recipient: the message recipient.
         """
+        DatabaseHandler(self.recipient, data, self.username)
         json_data = json.dumps(data)
-        MessageHandler.redis_client.publish(recipient, json_data)
+        with RedisConnected() as redis_client:
+            redis_client.publish(recipient, json_data)
 
     def run(self) -> None:
         """ Listens continuously to user messages and send them them to the desired destination.
@@ -137,44 +110,50 @@ class MessagePublisher(Thread):
             self.send_message(data, self.recipient)
 
 
+class MessagesHistory:
+    def __init__(self, username: str, recipient: str):
+        self.username = username
+        self.recipient = recipient
+
+    def public_messages_history(self) -> None:
+        recipient_id = DatabaseHandler.get_id(self.recipient)
+        with DatabaseConnected() as cursor:
+            messages = cursor.execute(
+                "SELECT  u.name, m.message_content from messages m, users u WHERE m.receiver_id ='" + recipient_id + "' and m.receiver_type ='group' and u.id = m.sender_id ORDER BY m.date ASC").fetchall()
+        self.__print_messages(messages)
+
+    def private_messages_history(self) -> None:
+        recipient_id = DatabaseHandler.get_id(self.recipient)
+        user_id = DatabaseHandler.get_id(self.username)
+        with DatabaseConnected() as cursor:
+            messages = cursor.execute(
+                "SELECT u.name, m.message_content from messages m, users u WHERE m.sender_id ='" + user_id + "' and m.receiver_id ='" + recipient_id + "' and m.receiver_type ='user' and u.id ='" + user_id + "' or m.sender_id ='" + recipient_id + "' and m.receiver_id ='" + user_id + "' and m.receiver_type ='user' and u.id ='" + recipient_id + "' ORDER BY m.date ASC ").fetchall()
+            self.__print_messages(messages)
+
+    @staticmethod
+    def __print_messages(messages) -> None:
+        """ print and reformat messages history coming from the database
+               """
+        for x in range(len(messages)):
+            print(messages[x][0] + ': ' + messages[x][1])
+
+
 class MessageSession:
-    def __init__(self):
-        self.username = None
-        self.recipient = None
+    def __init__(self, username: str, recipient: str):
+        self.username = username
+        self.recipient = recipient
+        self.public_channels = MessageHandler.get_public_channels()
+        self.private_channels = MessageHandler.get_private_channels()
+        self.start_messaging_session()
 
-    def get_user_info(self) -> None:
-        self.username: str = str(input("Enter your username: "))
-        self.recipient: str = str(input("Enter your Recipient: "))
-
-    def start_messaging_session(self):
+    def start_messaging_session(self) -> None:
         """ Starts the messaging session.
         """
-        public_channels = MessageHandler.get_public_channels()
-        private_channels = MessageHandler.get_private_channels()
-        if self.recipient in public_channels:
+        if self.recipient in self.public_channels:
+            MessagesHistory(self.username, self.recipient).public_messages_history()
             PublicMessageSubscriber(self.username, self.recipient)
-        elif self.recipient in private_channels:
+        elif self.recipient in self.private_channels:
+            MessagesHistory(self.username, self.recipient).private_messages_history()
             PrivateMessageSubscriber(self.username, self.recipient)
         MessagePublisher(self.username, self.recipient)
 
-    def __check_if_channel_exist(self) -> bool:
-        channel_exist = True
-        all_channels = MessageHandler.get_all_channels()
-        private_channels = MessageHandler.get_private_channels()
-
-        if self.username not in private_channels:
-            print(f"User '{self.username}' does not exist!")
-            channel_exist = False
-        if self.recipient not in all_channels:
-            print(f"Recipient '{self.recipient}' does not exist!")
-            channel_exist = False
-        return channel_exist
-
-    def start(self) -> None:
-        self.get_user_info()
-        if self.__check_if_channel_exist():
-            self.start_messaging_session()
-
-
-if __name__ == '__main__':
-    MessageSession().start()
