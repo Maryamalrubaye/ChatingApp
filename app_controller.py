@@ -1,8 +1,8 @@
-import login_system
 import contact_history
 
 from chat_helper import MessageHandler
 from message_session import MessageSession
+from login_system import Login, Registration
 from group_chat import GroupCreator, GroupHandler
 
 
@@ -17,10 +17,10 @@ class App:
         """
         self.choice = input('for login please write 1 & for signup please write 2: ')
         if self.choice == "1":
-            self.username = login_system.Login().login()
+            self.username = Login().login()
         elif self.choice == "2":
-            username, password = login_system.Registration().register()
-            self.username = login_system.Login().login(username, password)
+            username, password = Registration().register()
+            self.username = Login().login(username, password)
         else:
             print('Incorrect input! Please try again.')
             self.start()
