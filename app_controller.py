@@ -6,15 +6,15 @@ from message_session import MessageSession
 from group_chat import GroupCreator, GroupHandler
 
 
-class AppController:
+class App:
     def __init__(self):
-        self.username = None
-        self.recipient = None
-        self.choice = None
+        self.username: str = None
+        self.recipient: str = None
+        self.choice: str = None
 
-    def get_user_info(self) -> None:
-        """ check if user is registered or not and login to user account or creates new account
-               """
+    def start(self) -> None:
+        """ Check if user is registered or not and login to user account or creates new account
+        """
         self.choice = input('for login please write 1 & for signup please write 2: ')
         if self.choice == "1":
             self.username = login_system.Login().login()
@@ -23,7 +23,7 @@ class AppController:
             self.username = login_system.Login().login(username, password)
         else:
             print('Incorrect input! Please try again.')
-            self.get_user_info()
+            self.start()
         self.__main_page()
 
     def __get_recipient_info(self) -> None:
@@ -78,4 +78,4 @@ class AppController:
 
 
 if __name__ == '__main__':
-    AppController().get_user_info()
+    App().start()
