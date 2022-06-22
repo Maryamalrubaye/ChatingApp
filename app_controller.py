@@ -2,7 +2,7 @@ import contact_history
 
 from chat_helper import MessageHandler
 from message_session import MessageSession
-from login_system import Login, Registration
+from login_system import Login, Registration, UserSession
 from group_chat import GroupCreator, GroupHandler
 
 
@@ -11,19 +11,18 @@ class App:
         self.username: str = None
         self.recipient: str = None
         self.choice: str = None
+        self.login_or_register = {
+            "1": Login().login,
+            "2": Registration().register
+        }
+
+    def start_user_session(self) -> None:
+        choice = input('Enter 1 for login, 2 for signup: ')
+        self.login_or_register.get(choice, self.start_user_session)()
 
     def start(self) -> None:
-        """ Check if user is registered or not and login to user account or creates new account
-        """
-        self.choice = input('for login please write 1 & for signup please write 2: ')
-        if self.choice == "1":
-            self.username = Login().login()
-        elif self.choice == "2":
-            username, password = Registration().register()
-            self.username = Login().login(username, password)
-        else:
-            print('Incorrect input! Please try again.')
-            self.start()
+        self.start_user_session()
+        self.username = UserSession.username
         self.__main_page()
 
     def __get_recipient_info(self) -> None:
@@ -37,10 +36,12 @@ class App:
     def __main_page(self):
         print(f'Welcome {self.username} you have contacted the following channels: ')
         contact_history.ContactHistory(self.username)
-        self.choice = input('1- to create a new group  \n'
-                            '2- to search for new user \n'
-                            '3- choose any of the previously contacted channels \n'
-                            '4- to exit: ')
+        options = 'Options:\n' \
+                  '1- to create a new group\n' \
+                  '2- to search for new user\n' \
+                  '3- choose any of the previously contacted channels\n' \
+                  '4- to exit'
+        self.choice = input(options + '\nYour choice: ')
         if self.choice == '1':
             self.__group_creator()
         elif self.choice in ['2', '3']:

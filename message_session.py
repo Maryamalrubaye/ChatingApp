@@ -172,4 +172,3 @@ class MessageSession:
             MessagesHistory(self.username, self.recipient).individual_messages()
             GroupMessageSubscriber(self.username, self.recipient)
         MessagePublisher(self.username, self.recipient)
-

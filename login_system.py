@@ -1,5 +1,3 @@
-from typing import Tuple
-
 from database_connection import DatabaseConnected
 
 
@@ -32,7 +30,11 @@ class LoginHandler:
         return password
 
 
-class Registration:
+class UserSession:
+    username: str = None
+
+
+class Registration(UserSession):
     def __init__(self):
         self.username = None
         self.password = None
@@ -40,14 +42,14 @@ class Registration:
         self.password_confirmation = None
         self.LoginHandler = LoginHandler()
 
-    def register(self) -> Tuple[str, str]:
+    def register(self) -> None:
         self.__set_username()
         self.__set_email()
         self.__set_passwords()
         self.__confirm_password()
         self.__register_to_database()
         print('You are now registered.')
-        return self.username, self.password
+        Login().login(self.username, self.password)
 
     def __set_passwords(self) -> None:
         self.password = self.LoginHandler.get_password_input()
@@ -80,26 +82,27 @@ class Registration:
             return True
 
 
-class Login:
+class Login(UserSession):
     def __init__(self):
         self.password = None
         self.username = None
 
-    def set_username(self, user=None) -> str:
+    def set_username(self, user=None) -> None:
         self.username = user or LoginHandler.get_username_input()
 
-    def set_password(self, password=None) -> str:
+    def set_password(self, password=None) -> None:
         self.password = password or LoginHandler.get_password_input()
 
-    def login(self, username=None, password=None) -> str:
+    def login(self, username=None, password=None) -> None:
         self.set_username(username)
         self.set_password(password)
         if LoginHandler.check_username_existing(self.username) and self.__check_password():
             print('Successfully logged-in :)')
-            return self.username
         else:
             print('wrong username or password please try again!')
             self.login()
+
+        UserSession.username = self.username
 
     def __check_password(self) -> bool:
         with DatabaseConnected() as cursor:
